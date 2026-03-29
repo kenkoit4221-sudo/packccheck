@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PackCheck — Pakendikontroll</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F5F0;
+    --surface: #FFFFFF;
+    --border: #E2DDD5;
+    --text: #1A1814;
+    --muted: #7A7670;
+    --hint: #B0ABA4;
+    --accent: #1A1814;
+    --err: #C94040;
+    --err-bg: #FDF0F0;
+    --err-border: #E8BEBE;
+    --warn: #B07020;
+    --warn-bg: #FDF6EC;
+    --warn-border: #E8D4A0;
+    --ok: #2E7D52;
+    --ok-bg: #EEF7F2;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+
+  .logo span {
+    color: var(--err);
+  }
+
+  .header-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    letter-spacing: 0.05em;
+  }
+
+  /* API KEY SETUP */
+  #apiSetup {
+    max-width: 480px;
+    margin: 80px auto;
+    padding: 0 24px;
+  }
+
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px;
+  }
+
+  .setup-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .setup-sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 28px;
+    line-height: 1.6;
+  }
+
+  .field-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .api-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-family: 'DM Sans', monospace;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    transition: border-color 0.15s;
+    margin-bottom: 16px;
+  }
+
+  .api-input:focus { border-color: var(--accent); }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--text);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 11px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .btn-primary:hover { opacity: 0.85; }
+
+  .setup-note {
+    font-size: 12px;
+    color: var(--hint);
+    margin-top: 14px;
+    text-align: center;
+  }
+
+  /* MAIN APP */
+  #app { display: none; }
+
+  .app-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 0;
+    min-height: calc(100vh - 56px);
+  }
+
+  /* LEFT — PDF viewer */
+  .viewer-col {
+    padding: 28px 28px 28px 32px;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .viewer-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .file-info {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .file-name {
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-secondary:hover { background: var(--bg); }
+
+  .btn-analyse {
+    background: var(--text);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 18px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .btn-analyse:hover { opacity: 0.85; }
+  .btn-analyse:disabled { opacity: 0.45; cursor: default; }
+
+  /* UPLOAD ZONE */
+  #uploadZone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  #uploadZone:hover, #uploadZone.drag {
+    border-color: var(--accent);
+    background: var(--bg);
+  }
+
+  .upload-icon {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 16px;
+    color: var(--hint);
+  }
+
+  .upload-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+
+  .upload-sub {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  /* CANVAS WRAP */
+  #canvasWrap {
+    display: none;
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    line-height: 0;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+
+  #pdfCanvas { display: block; width: 100%; height: auto; }
+
+  #annotLayer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* STICKY PINS */
+  .pin-group {
+    position: absolute;
+    pointer-events: all;
+    cursor: pointer;
+    transform: translate(-50%, -100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: opacity 0.2s;
+    z-index: 10;
+  }
+
+  .pin-bubble {
+    border-radius: 6px 6px 6px 0;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #fff;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: transform 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .pin-group:hover .pin-bubble { transform: translateY(-2px); }
+
+  .pin-stem {
+    width: 2px;
+    height: 12px;
+    margin-bottom: -1px;
+  }
+
+  .pin-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+  }
+
+  .pin-group.err .pin-bubble { background: var(--err); }
+  .pin-group.err .pin-stem { background: var(--err); }
+  .pin-group.err .pin-dot { background: var(--err); }
+  .pin-group.warn .pin-bubble { background: var(--warn); }
+  .pin-group.warn .pin-stem { background: var(--warn); }
+  .pin-group.warn .pin-dot { background: var(--warn); }
+
+  .pin-group.dimmed { opacity: 0.18; }
+  .pin-group.highlighted { opacity: 1 !important; z-index: 20; }
+
+  /* HIGHLIGHT BOX */
+  .hl-box {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 3px;
+    transition: opacity 0.2s;
+  }
+
+  .hl-box.err {
+    border: 2px solid var(--err);
+    background: rgba(201, 64, 64, 0.1);
+  }
+
+  .hl-box.warn {
+    border: 2px solid var(--warn);
+    background: rgba(176, 112, 32, 0.1);
+  }
+
+  .hl-box.dimmed { opacity: 0.08; }
+
+  /* RIGHT SIDEBAR */
+  .sidebar {
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 56px);
+    position: sticky;
+    top: 56px;
+  }
+
+  .sidebar-header {
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  .score-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .score-card {
+    flex: 1;
+    border-radius: var(--radius-sm);
+    padding: 10px 8px;
+    text-align: center;
+  }
+
+  .score-card.err { background: var(--err-bg); border: 1px solid var(--err-border); }
+  .score-card.warn { background: var(--warn-bg); border: 1px solid var(--warn-border); }
+  .score-card.ok { background: var(--ok-bg); border: 1px solid #B8DEC8; }
+
+  .score-num {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .score-card.err .score-num { color: var(--err); }
+  .score-card.warn .score-num { color: var(--warn); }
+  .score-card.ok .score-num { color: var(--ok); }
+
+  .score-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 3px;
+  }
+
+  .sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+  }
+
+  /* ISSUE CARDS */
+  .issue-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    background: var(--surface);
+  }
+
+  .issue-card:hover { transform: translateX(2px); }
+  .issue-card.active-err { border-color: var(--err); background: var(--err-bg); }
+  .issue-card.active-warn { border-color: var(--warn); background: var(--warn-bg); }
+
+  .issue-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .issue-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 500;
+    color: #fff;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .issue-num.err { background: var(--err); }
+  .issue-num.warn { background: var(--warn); }
+
+  .issue-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .issue-badge.err { background: var(--err-bg); color: var(--err); border: 1px solid var(--err-border); }
+  .issue-badge.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+
+  .issue-title {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text);
+  }
+
+  .issue-body {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    padding-left: 30px;
+    margin-bottom: 5px;
+  }
+
+  .issue-reg {
+    font-size: 11px;
+    color: var(--hint);
+    padding-left: 30px;
+    font-style: italic;
+  }
+
+  /* STATUS / SPINNER */
+  .status-bar {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--hint);
+  }
+
+  .empty-state svg { margin: 0 auto 12px; display: block; opacity: 0.4; }
+  .empty-state p { font-size: 13px; }
+
+  /* STATUS BADGE */
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    flex-shrink: 0;
+  }
+
+  .hint-text {
+    font-size: 11px;
+    color: var(--hint);
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hint);
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Pack<span>Check</span></div>
+  <div class="header-badge">Prototüüp v0.1</div>
+</header>
+
+<!-- API KEY SETUP -->
+<div id="apiSetup">
+  <div class="setup-card">
+    <div class="setup-title">Tere tulemast</div>
+    <p class="setup-sub">Sisesta oma Anthropic API võti. Võti salvestatakse ainult sinu brauseri mällu ja ei lahku sinu arvutist.</p>
+    <label class="field-label">Anthropic API võti</label>
+    <input type="password" class="api-input" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off">
+    <button class="btn-primary" onclick="saveApiKey()">Alusta →</button>
+    <p class="setup-note">Võtit ei salvestata serverisse. Leitav: console.anthropic.com</p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="app-layout">
+
+    <!-- LEFT: PDF VIEWER -->
+    <div class="viewer-col">
+      <div class="viewer-topbar">
+        <div class="file-info" id="fileInfo">
+          <span>Ükski fail pole laaditud</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="status-bar" id="statusBar"></div>
+          <button class="btn-secondary" onclick="resetApp()">Uus fail</button>
+          <button class="btn-analyse" id="analyseBtn" onclick="runAnalysis()" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Analüüsi
+          </button>
+        </div>
+      </div>
+
+      <!-- UPLOAD ZONE -->
+      <div id="uploadZone"
+        onclick="document.getElementById('fileInput').click()"
+        ondragover="handleDragOver(event)"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleDrop(event)">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <div class="upload-title">Lohista PDF siia</div>
+        <p class="upload-sub">või kliki faili valimiseks</p>
+      </div>
+
+      <!-- CANVAS -->
+      <div id="canvasWrap">
+        <canvas id="pdfCanvas"></canvas>
+        <div id="annotLayer"></div>
+      </div>
+      <p class="hint-text" id="hintText" style="display:none">Kliki märgendil või probleemil paremal, et esile tõsta</p>
+    </div>
+
+    <!-- RIGHT: SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Analüüs</div>
+        <div class="score-row" id="scoreRow" style="display:none">
+          <div class="score-card err">
+            <div class="score-num" id="scoreErr">0</div>
+            <div class="score-label">Vead</div>
+          </div>
+          <div class="score-card warn">
+            <div class="score-num" id="scoreWarn">0</div>
+            <div class="score-label">Hoiatused</div>
+          </div>
+          <div class="score-card ok">
+            <div class="score-num" id="scoreOk">0</div>
+            <div class="score-label">Korras</div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-body" id="sidebarBody">
+        <div class="empty-state">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <p>Lae üles pakendi PDF<br>ja vajuta "Analüüsi"</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="application/pdf" style="display:none" onchange="loadFile(this)">
+
+<script>
+const ANALYSIS_PROMPT = `You are an expert food packaging compliance analyst for EU and UK markets.
+
+Analyze this food packaging image carefully. Look at every detail — text blocks, symbols, logos, ingredient lists, nutritional tables, allergen declarations, recycling symbols, contact information, and any claims.
+
+Return ONLY a raw JSON object (no markdown, no code blocks, no explanation):
+
+{
+  "issues": [
+    {
+      "id": 1,
+      "type": "error",
+      "title": "Short title max 8 words",
+      "body": "Clear explanation of the problem and why it matters.",
+      "regulation": "Specific regulation reference",
+      "pin_x": 0.25,
+      "pin_y": 0.45,
+      "box_x": 0.10,
+      "box_y": 0.40,
+      "box_w": 0.30,
+      "box_h": 0.12
+    }
+  ],
+  "ok_count": 11
+}
+
+COORDINATE SYSTEM: All values are fractions 0.0–1.0 of the IMAGE dimensions.
+- pin_x, pin_y: exact center of the problem area (where the pin tip should point)
+- box_x, box_y: top-left corner of highlight rectangle
+- box_w, box_h: width and height of highlight rectangle
+
+Be very precise with coordinates. Look carefully at the actual position of each element.
+
+type: "error" = critical non-compliance, "warning" = minor issue or recommendation
+ok_count: integer count of requirements that ARE met
+
+Focus on:
+1. Allergen highlighting — FIC 1169/2011 Art.21: allergens must be visually distinct (bold/italic/colour) in EVERY language version
+2. Minimum font size — FIC Art.13: x-height ≥1.2mm for mandatory info on packs >80cm²
+3. Gluten/health claims — EU 41/2009, EU 1924/2006: claims must be substantiated
+4. Green/carbon claims — Green Claims Directive 2024/825: environmental claims need verified methodology
+5. Recycling symbols — PPWR 2025/40: material identification codes
+6. UK market — UK FIR 2014: UK responsible person required if selling in UK
+7. Food contact materials — FCM 1935/2004: fork+glass symbol or "for food contact" text
+8. Country of origin if relevant
+9. Net quantity placement and format
+10. Any other visible compliance issues`;
+
+let apiKey = '';
+let currentIssues = [];
+let activeIssue = -1;
+let canvasNatW = 0, canvasNatH = 0;
+
+// ── API KEY ──────────────────────────────────────────────
+function saveApiKey() {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (!val.startsWith('sk-ant')) {
+    alert('Palun sisesta kehtiv Anthropic API võti (algab sk-ant-...)');
+    return;
+  }
+  apiKey = val;
+  sessionStorage.setItem('pc_key', val);
+  document.getElementById('apiSetup').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+// Restore key from session
+window.addEventListener('load', () => {
+  const saved = sessionStorage.getItem('pc_key');
+  if (saved) {
+    apiKey = saved;
+    document.getElementById('apiSetup').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  }
+});
+
+// ── FILE HANDLING ────────────────────────────────────────
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('drag');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) processFile(f);
+}
+
+function loadFile(inp) {
+  if (inp.files[0]) processFile(inp.files[0]);
+}
+
+function processFile(file) {
+  if (file.type !== 'application/pdf') {
+    alert('Palun lae üles PDF fail.');
+    return;
+  }
+  setStatus('Laen PDF-i...', true);
+  document.getElementById('fileInfo').innerHTML =
+    `<span class="file-name">${file.name}</span><span>${(file.size/1024).toFixed(0)} KB</span>`;
+  const reader = new FileReader();
+  reader.onload = e => renderPDF(e.target.result);
+  reader.readAsArrayBuffer(file);
+}
+
+async function renderPDF(buf) {
+  try {
+    const lib = window['pdfjs-dist/build/pdf'];
+    lib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await lib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const vp = page.getViewport({ scale: 2.5 });
+    const canvas = document.getElementById('pdfCanvas');
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    canvasNatW = vp.width;
+    canvasNatH = vp.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, vp.width, vp.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('canvasWrap').style.display = 'block';
+    document.getElementById('analyseBtn').style.display = 'flex';
+    setStatus('PDF laaditud', false);
+  } catch (e) {
+    setStatus('', false);
+    alert('PDF laadimine ebaõnnestus: ' + e.message);
+  }
+}
+
+// ── ANALYSIS ─────────────────────────────────────────────
+async function runAnalysis() {
+  const btn = document.getElementById('analyseBtn');
+  btn.disabled = true;
+  setStatus('AI analüüsib...', true);
+  clearAnnotations();
+  document.getElementById('sidebarBody').innerHTML = '';
+  document.getElementById('scoreRow').style.display = 'none';
+  document.getElementById('hintText').style.display = 'none';
+
+  try {
+    const canvas = document.getElementById('pdfCanvas');
+    const b64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+            { type: 'text', text: ANALYSIS_PROMPT }
+          ]
+        }]
+      })
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`API ${resp.status}: ${t.slice(0, 300)}`);
+    }
+
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const raw = (data.content || []).map(b => b.text || '').join('').trim();
+    const parsed = JSON.parse(raw);
+    currentIssues = parsed.issues || [];
+    renderResults(currentIssues, parsed.ok_count || 0);
+
+  } catch (e) {
+    setStatus('', false);
+    btn.disabled = false;
+    alert('Analüüs ebaõnnestus: ' + e.message);
+  }
+}
+
+// ── RENDER RESULTS ───────────────────────────────────────
+function renderResults(issues, okCount) {
+  const errs = issues.filter(i => i.type === 'error').length;
+  const warns = issues.filter(i => i.type === 'warning').length;
+
+  document.getElementById('scoreErr').textContent = errs;
+  document.getElementById('scoreWarn').textContent = warns;
+  document.getElementById('scoreOk').textContent = okCount;
+  document.getElementById('scoreRow').style.display = 'flex';
+  document.getElementById('hintText').style.display = 'block';
+  document.getElementById('analyseBtn').disabled = false;
+
+  // Build sidebar cards
+  const body = document.getElementById('sidebarBody');
+  body.innerHTML = `<div class="section-label" style="margin-bottom:12px">${issues.length} probleemi leitud</div>`;
+
+  issues.forEach((iss, i) => {
+    const cls = iss.type === 'error' ? 'err' : 'warn';
+    const label = iss.type === 'error' ? 'Viga' : 'Hoiatus';
+    const card = document.createElement('div');
+    card.className = 'issue-card';
+    card.id = 'card' + i;
+    card.innerHTML = `
+      <div class="issue-top">
+        <div class="issue-num ${cls}">${iss.id}</div>
+        <span class="issue-badge ${cls}">${label}</span>
+        <div class="issue-title">${iss.title}</div>
+      </div>
+      <div class="issue-body">${iss.body}</div>
+      <div class="issue-reg">${iss.regulation}</div>`;
+    card.onclick = () => selectIssue(i);
+    body.appendChild(card);
+  });
+
+  // Build annotations
+  buildAnnotations(issues);
+  setStatus(`Valmis — ${issues.length} probleemi`, false);
+}
+
+// ── ANNOTATIONS ──────────────────────────────────────────
+function buildAnnotations(issues) {
+  const layer = document.getElementById('annotLayer');
+  layer.innerHTML = '';
+  const wrap = document.getElementById('canvasWrap');
+  const rect = wrap.getBoundingClientRect();
+
+  issues.forEach((iss, i) => {
+    const cls = iss.type === 'error' ? 'err' : 'warn';
+
+    // Highlight box
+    const hl = document.createElement('div');
+    hl.className = `hl-box ${cls}`;
+    hl.id = 'hl' + i;
+    hl.style.left = (iss.box_x * 100) + '%';
+    hl.style.top = (iss.box_y * 100) + '%';
+    hl.style.width = (iss.box_w * 100) + '%';
+    hl.style.height = (iss.box_h * 100) + '%';
+    layer.appendChild(hl);
+
+    // Pin
+    const pin = document.createElement('div');
+    pin.className = `pin-group ${cls}`;
+    pin.id = 'pin' + i;
+    pin.style.left = (iss.pin_x * 100) + '%';
+    pin.style.top = (iss.pin_y * 100) + '%';
+    pin.innerHTML = `
+      <div class="pin-bubble">${iss.id} <span style="opacity:0.8;font-weight:300">${iss.title.split(' ').slice(0,3).join(' ')}...</span></div>
+      <div class="pin-stem"></div>
+      <div class="pin-dot"></div>`;
+    pin.onclick = () => selectIssue(i);
+    layer.appendChild(pin);
+  });
+}
+
+function clearAnnotations() {
+  document.getElementById('annotLayer').innerHTML = '';
+  currentIssues = [];
+  activeIssue = -1;
+}
+
+function selectIssue(i) {
+  activeIssue = activeIssue === i ? -1 : i;
+
+  // Update cards
+  document.querySelectorAll('.issue-card').forEach((c, j) => {
+    c.classList.remove('active-err', 'active-warn');
+    if (j === activeIssue) {
+      c.classList.add(currentIssues[j].type === 'error' ? 'active-err' : 'active-warn');
+      c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+
+  // Update pins and highlights
+  currentIssues.forEach((_, j) => {
+    const pin = document.getElementById('pin' + j);
+    const hl = document.getElementById('hl' + j);
+    if (!pin || !hl) return;
+    if (activeIssue === -1) {
+      pin.classList.remove('dimmed', 'highlighted');
+      hl.classList.remove('dimmed');
+    } else if (j === activeIssue) {
+      pin.classList.remove('dimmed');
+      pin.classList.add('highlighted');
+      hl.classList.remove('dimmed');
+    } else {
+      pin.classList.add('dimmed');
+      pin.classList.remove('highlighted');
+      hl.classList.add('dimmed');
+    }
+  });
+}
+
+// ── UTILS ────────────────────────────────────────────────
+function setStatus(msg, loading) {
+  const bar = document.getElementById('statusBar');
+  if (loading) {
+    bar.innerHTML = `<div class="spinner"></div><span>${msg}</span>`;
+  } else if (msg) {
+    bar.innerHTML = `<div class="status-dot"></div><span>${msg}</span>`;
+  } else {
+    bar.innerHTML = '';
+  }
+}
+
+function resetApp() {
+  currentIssues = [];
+  activeIssue = -1;
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('canvasWrap').style.display = 'none';
+  document.getElementById('analyseBtn').style.display = 'none';
+  document.getElementById('annotLayer').innerHTML = '';
+  document.getElementById('scoreRow').style.display = 'none';
+  document.getElementById('hintText').style.display = 'none';
+  document.getElementById('sidebarBody').innerHTML = `
+    <div class="empty-state">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <p>Lae üles pakendi PDF<br>ja vajuta "Analüüsi"</p>
+    </div>`;
+  document.getElementById('fileInfo').innerHTML = '<span>Ükski fail pole laaditud</span>';
+  document.getElementById('fileInput').value = '';
+  setStatus('', false);
+}
+</script>
+</body>
+</html>
