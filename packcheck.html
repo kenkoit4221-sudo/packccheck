@@ -788,24 +788,10 @@ async function runAnalysis() {
     const canvas = document.getElementById('pdfCanvas');
     const b64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('/api/analyze', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
-            { type: 'text', text: ANALYSIS_PROMPT }
-          ]
-        }]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: b64, apiKey: apiKey })
     });
 
     if (!resp.ok) {
@@ -813,11 +799,8 @@ async function runAnalysis() {
       throw new Error(`API ${resp.status}: ${t.slice(0, 300)}`);
     }
 
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.message);
-
-    const raw = (data.content || []).map(b => b.text || '').join('').trim();
-    const parsed = JSON.parse(raw);
+    const parsed = await resp.json();
+    if (parsed.error) throw new Error(parsed.error);
     currentIssues = parsed.issues || [];
     renderResults(currentIssues, parsed.ok_count || 0);
 
