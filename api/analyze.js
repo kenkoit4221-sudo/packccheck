@@ -3,61 +3,53 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const { imageBase64, apiKey } = req.body;
 
     const PROMPT = `You are an expert food packaging compliance analyst for EU and UK markets.
 
-Analyze this food packaging image carefully. Look at every detail — text blocks, symbols, logos, ingredient lists, nutritional tables, allergen declarations, recycling symbols, contact information, and any claims.
+This image shows a food packaging design as a flat unfolded layout — the full packaging spread horizontally across the image.
 
-Return ONLY a raw JSON object (no markdown, no code blocks, no explanation):
+COORDINATE SYSTEM — read carefully:
+All coordinates are fractions 0.0-1.0 of the FULL image width and height.
+x=0.0 is the very left edge, x=1.0 is the very right edge.
+y=0.0 is the very top edge, y=1.0 is the very bottom edge.
 
-{
-  "issues": [
-    {
-      "id": 1,
-      "type": "error",
-      "title": "Short title max 8 words",
-      "body": "Clear explanation of the problem and why it matters.",
-      "regulation": "Specific regulation reference",
-      "pin_x": 0.25,
-      "pin_y": 0.45,
-      "box_x": 0.10,
-      "box_y": 0.40,
-      "box_w": 0.30,
-      "box_h": 0.12
-    }
-  ],
-  "ok_count": 11
-}
+To find coordinates of any element:
+1. Estimate how far from the LEFT the element is as a fraction → that is pin_x
+2. Estimate how far from the TOP the element is as a fraction → that is pin_y
+3. For the bounding box, estimate the top-left corner (box_x, box_y) and size (box_w, box_h)
 
-COORDINATE SYSTEM: All values are fractions 0.0-1.0 of the IMAGE dimensions.
-- pin_x, pin_y: exact center of the problem area (where the pin tip should point)
-- box_x, box_y: top-left corner of highlight rectangle
-- box_w, box_h: width and height of highlight rectangle
+TYPICAL PANEL POSITIONS for this Tetra Pak horizontal layout:
+- Far left panel (marketing slogans): x≈0.00-0.17
+- Ingredient/nutrition panel: x≈0.17-0.42
+- Center panel (large logo + product image): x≈0.42-0.65
+- Multilingual text panel: x≈0.65-0.82
+- Setup info panel (right): x≈0.82-1.00
+- Main content vertically: y≈0.08-0.78
+- Symbol strip (FSC, barcodes): y≈0.78-0.90
+- Bottom branding strip: y≈0.90-1.00
 
-Be very precise with coordinates. Look carefully at the actual position of each element.
+Return ONLY raw JSON, no markdown, no explanation:
 
-type: "error" = critical non-compliance, "warning" = minor issue or recommendation
-ok_count: integer count of requirements that ARE met
+{"issues":[{"id":1,"type":"error","title":"max 8 word title","body":"Clear 2-3 sentence explanation.","regulation":"Specific regulation","pin_x":0.25,"pin_y":0.45,"box_x":0.18,"box_y":0.40,"box_w":0.20,"box_h":0.10}],"ok_count":10}
 
-Focus on:
-1. Allergen highlighting — FIC 1169/2011 Art.21: allergens must be visually distinct in EVERY language version
-2. Minimum font size — FIC Art.13: x-height 1.2mm for mandatory info on packs over 80cm2
-3. Gluten/health claims — EU 41/2009, EU 1924/2006: claims must be substantiated
-4. Green/carbon claims — Green Claims Directive 2024/825: environmental claims need verified methodology
-5. Recycling symbols — PPWR 2025/40: material identification codes
-6. UK market — UK FIR 2014: UK responsible person required if selling in UK
-7. Net quantity placement and format
-8. Any other visible compliance issues`;
+type: "error"=critical violation, "warning"=minor issue
+ok_count: integer, number of requirements that ARE met
+
+Check these compliance areas:
+1. Allergen highlighting — FIC 1169/2011 Art.21: allergens must be bold/italic/coloured in EVERY language version shown on pack
+2. Font size — FIC Art.13 Annex IV: mandatory info x-height must be ≥1.2mm on packs >80cm²
+3. Gluten-free claim — EU 41/2009: must be substantiated, gluten content ≤20mg/kg
+4. Carbon/green claims — Green Claims Directive 2024/825: all environmental claims need verified methodology publicly available
+5. Organic claim — EU 2018/848 Art.32: control body code must appear on same display panel as organic logo
+6. UK responsible person — UK FIR 2014: if sold in UK, a UK address must appear on pack
+7. Recycling/material codes — PPWR 2025/40 and Decision 97/129/EC
+8. Storage and use instructions — FIC Art.25: must be present and legible
+9. Any other issues you observe`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -72,14 +64,7 @@ Focus on:
         messages: [{
           role: 'user',
           content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: imageBase64
-              }
-            },
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
             { type: 'text', text: PROMPT }
           ]
         }]
@@ -100,3 +85,4 @@ Focus on:
     return res.status(500).json({ error: err.message });
   }
 }
+
